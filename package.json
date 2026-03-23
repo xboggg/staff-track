@@ -1,0 +1,26 @@
+{
+  "name": "timetrack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TimeTrack - Enterprise Workforce Time & Attendance System by NovaStream Digital",
+  "author": "NovaStream Digital <info@novastreamdigital.com>",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "prettier": "^3.5.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  }
+}

@@ -1,0 +1,475 @@
+// ============================================
+// TimeTrack - Database Schema
+// NovaStream Digital
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Organization ---
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  domain    String?
+  logoUrl   String?  @map("logo_url")
+  timezone  String   @default("Africa/Accra")
+  isActive  Boolean  @default(true) @map("is_active")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  departments Department[]
+  locations   Location[]
+  users       User[]
+  shifts      Shift[]
+
+  @@map("organizations")
+}
+
+// --- Users & Auth ---
+
+model User {
+  id              String    @id @default(uuid())
+  employeeId      String    @map("employee_id")
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  role            UserRole  @default(EMPLOYEE)
+  departmentId    String    @map("department_id")
+  organizationId  String    @map("organization_id")
+  phoneNumber     String?   @map("phone_number")
+  avatarUrl       String?   @map("avatar_url")
+  isActive        Boolean   @default(true) @map("is_active")
+  twoFactorSecret String?   @map("two_factor_secret")
+  twoFactorEnabled Boolean  @default(false) @map("two_factor_enabled")
+  lastLoginAt     DateTime? @map("last_login_at")
+  failedAttempts  Int       @default(0) @map("failed_attempts")
+  lockedUntil     DateTime? @map("locked_until")
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  department      Department         @relation(fields: [departmentId], references: [id])
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  leaveRequests   LeaveRequest[]     @relation("LeaveRequester")
+  leaveApprovals  LeaveRequest[]     @relation("LeaveApprover")
+  leaveStepApprovals LeaveApproval[] @relation("LeaveStepApprover")
+  devices         Device[]
+  refreshTokens   RefreshToken[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  shiftAssignments ShiftAssignment[]
+  managedDepartments Department[]    @relation("DepartmentHead")
+  overtimeRecords OvertimeRecord[]
+  approvedOvertime OvertimeRecord[]  @relation("OvertimeApprover")
+
+  @@unique([employeeId, organizationId])
+  @@index([departmentId])
+  @@index([organizationId])
+  @@index([email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  deviceId  String?  @map("device_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// --- Departments ---
+
+model Department {
+  id             String   @id @default(uuid())
+  name           String
+  code           String
+  organizationId String   @map("organization_id")
+  parentId       String?  @map("parent_id")
+  headId         String?  @map("head_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  parent       Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children     Department[] @relation("DepartmentHierarchy")
+  head         User?        @relation("DepartmentHead", fields: [headId], references: [id])
+  users        User[]
+
+  @@unique([code, organizationId])
+  @@index([organizationId])
+  @@map("departments")
+}
+
+// --- Locations & Geofencing ---
+
+model Location {
+  id             String   @id @default(uuid())
+  name           String
+  address        String
+  latitude       Float
+  longitude      Float
+  radiusMeters   Int      @default(100) @map("radius_meters")
+  organizationId String   @map("organization_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  timezone       String   @default("Africa/Accra")
+  floor          String?
+  building       String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  clockIns        AttendanceRecord[] @relation("ClockInLocation")
+  clockOuts       AttendanceRecord[] @relation("ClockOutLocation")
+  qrCodes         QrCode[]
+
+  @@index([organizationId])
+  @@map("locations")
+}
+
+// --- Attendance ---
+
+model AttendanceRecord {
+  id                String           @id @default(uuid())
+  userId            String           @map("user_id")
+  date              DateTime         @db.Date
+  clockIn           DateTime?        @map("clock_in")
+  clockOut          DateTime?        @map("clock_out")
+  clockInMethod     ClockMethod?     @map("clock_in_method")
+  clockOutMethod    ClockMethod?     @map("clock_out_method")
+  clockInLocationId String?          @map("clock_in_location_id")
+  clockOutLocationId String?         @map("clock_out_location_id")
+  clockInLatitude   Float?           @map("clock_in_latitude")
+  clockInLongitude  Float?           @map("clock_in_longitude")
+  clockOutLatitude  Float?           @map("clock_out_latitude")
+  clockOutLongitude Float?           @map("clock_out_longitude")
+  status            AttendanceStatus @default(PRESENT)
+  totalMinutes      Int?             @map("total_minutes")
+  overtimeMinutes   Int?             @map("overtime_minutes")
+  notes             String?
+  isManualEntry     Boolean          @default(false) @map("is_manual_entry")
+  approvedBy        String?          @map("approved_by")
+  deviceId          String?          @map("device_id")
+  ipAddress         String?          @map("ip_address")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  user            User      @relation(fields: [userId], references: [id])
+  clockInLocation Location? @relation("ClockInLocation", fields: [clockInLocationId], references: [id])
+  clockOutLocation Location? @relation("ClockOutLocation", fields: [clockOutLocationId], references: [id])
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@index([date])
+  @@index([status])
+  @@map("attendance_records")
+}
+
+// --- QR Codes ---
+
+model QrCode {
+  id          String   @id @default(uuid())
+  locationId  String   @map("location_id")
+  token       String   @unique
+  hmacSignature String @map("hmac_signature")
+  expiresAt   DateTime @map("expires_at")
+  isUsed      Boolean  @default(false) @map("is_used")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@index([token])
+  @@index([expiresAt])
+  @@map("qr_codes")
+}
+
+// --- Shifts ---
+
+model Shift {
+  id                  String    @id @default(uuid())
+  name                String
+  type                ShiftType @default(MORNING)
+  organizationId      String    @map("organization_id")
+  startTime           String    @map("start_time")
+  endTime             String    @map("end_time")
+  graceMinutesLate    Int       @default(15) @map("grace_minutes_late")
+  graceMinutesEarly   Int       @default(15) @map("grace_minutes_early")
+  breakDurationMinutes Int      @default(60) @map("break_duration_minutes")
+  isDefault           Boolean   @default(false) @map("is_default")
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  assignments  ShiftAssignment[]
+
+  @@map("shifts")
+}
+
+model ShiftAssignment {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  shiftId   String   @map("shift_id")
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime? @map("end_date") @db.Date
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id])
+  shift Shift @relation(fields: [shiftId], references: [id])
+
+  @@index([userId])
+  @@index([shiftId])
+  @@map("shift_assignments")
+}
+
+// --- Leave Management ---
+
+model LeaveRequest {
+  id              String      @id @default(uuid())
+  userId          String      @map("user_id")
+  type            LeaveType
+  startDate       DateTime    @map("start_date") @db.Date
+  endDate         DateTime    @map("end_date") @db.Date
+  totalDays       Int         @map("total_days")
+  reason          String
+  status          LeaveStatus @default(PENDING)
+  currentLevel    Int         @default(1) @map("current_level")
+  approvedBy      String?     @map("approved_by")
+  approvedAt      DateTime?   @map("approved_at")
+  rejectionReason String?     @map("rejection_reason")
+  rejectedBy      String?     @map("rejected_by")
+  rejectedAt      DateTime?   @map("rejected_at")
+  attachmentUrl   String?     @map("attachment_url")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  user      User            @relation("LeaveRequester", fields: [userId], references: [id])
+  approver  User?           @relation("LeaveApprover", fields: [approvedBy], references: [id])
+  approvals LeaveApproval[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
+}
+
+model LeaveApproval {
+  id             String         @id @default(uuid())
+  leaveRequestId String         @map("leave_request_id")
+  level          Int
+  levelName      String         @map("level_name")
+  status         ApprovalStatus @default(PENDING)
+  approverId     String?        @map("approver_id")
+  comments       String?
+  actedAt        DateTime?      @map("acted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  approver     User?        @relation("LeaveStepApprover", fields: [approverId], references: [id])
+
+  @@unique([leaveRequestId, level])
+  @@index([leaveRequestId])
+  @@index([approverId])
+  @@index([status])
+  @@map("leave_approvals")
+}
+
+model LeaveBalance {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  leaveType     LeaveType @map("leave_type")
+  year          Int
+  totalDays     Int      @map("total_days")
+  usedDays      Int      @default(0) @map("used_days")
+  carriedOver   Int      @default(0) @map("carried_over")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, leaveType, year])
+  @@map("leave_balances")
+}
+
+// --- Overtime ---
+
+model OvertimeRecord {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  date        DateTime       @db.Date
+  minutes     Int
+  reason      String
+  status      ApprovalStatus @default(PENDING)
+  approvedBy  String?        @map("approved_by")
+  approvedAt  DateTime?      @map("approved_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  user     User  @relation(fields: [userId], references: [id])
+  approver User? @relation("OvertimeApprover", fields: [approvedBy], references: [id])
+
+  @@index([userId])
+  @@map("overtime_records")
+}
+
+// --- Devices ---
+
+model Device {
+  id           String         @id @default(uuid())
+  userId       String         @map("user_id")
+  deviceName   String         @map("device_name")
+  platform     DevicePlatform
+  fingerprint  String         @unique
+  pushToken    String?        @map("push_token")
+  isApproved   Boolean        @default(true) @map("is_approved")
+  lastUsedAt   DateTime       @default(now()) @map("last_used_at")
+  registeredAt DateTime       @default(now()) @map("registered_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("devices")
+}
+
+// --- Audit Log ---
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  timestamp  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// --- Notifications ---
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  body      String
+  type      String
+  data      Json?
+  isRead    Boolean  @default(false) @map("is_read")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// --- Holidays ---
+
+model Holiday {
+  id          String   @id @default(uuid())
+  name        String
+  date        DateTime @db.Date
+  isRecurring Boolean  @default(false) @map("is_recurring")
+  countryCode String   @default("GH") @map("country_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([date, countryCode])
+  @@map("holidays")
+}
+
+// --- Enums ---
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  HR_MANAGER
+  DEPARTMENT_HEAD
+  SUPERVISOR
+  EMPLOYEE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EARLY_DEPARTURE
+  HALF_DAY
+  ON_LEAVE
+  HOLIDAY
+  REMOTE
+  AUTO_CLOCKED_OUT
+}
+
+enum ClockMethod {
+  QR_CODE
+  GPS
+  MANUAL
+  BIOMETRIC
+  NFC
+  KIOSK
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  MATERNITY
+  PATERNITY
+  COMPASSIONATE
+  STUDY
+  UNPAID
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ShiftType {
+  MORNING
+  AFTERNOON
+  NIGHT
+  FLEXIBLE
+  SPLIT
+  CUSTOM
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+  KIOSK
+}
