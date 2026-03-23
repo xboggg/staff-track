@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ForbiddenException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -373,6 +374,108 @@ export class AuthService {
     });
 
     return { message: 'Password has been reset successfully. Please log in with your new password.' };
+  }
+
+  async registerOrganization(data: {
+    organizationName: string;
+    organizationCode: string;
+    domain?: string;
+    adminEmail: string;
+    adminPassword: string;
+    adminFirstName: string;
+    adminLastName: string;
+    timezone?: string;
+  }) {
+    // Check if org code or admin email already exists
+    const existingOrg = await this.db.organization.findUnique({
+      where: { code: data.organizationCode },
+    });
+    if (existingOrg) {
+      throw new ConflictException('Organization code is already taken');
+    }
+
+    const existingUser = await this.db.user.findUnique({
+      where: { email: data.adminEmail },
+    });
+    if (existingUser) {
+      throw new ConflictException('Email address is already registered');
+    }
+
+    const passwordHash = await bcrypt.hash(data.adminPassword, BCRYPT_ROUNDS);
+
+    // Create org, default department, and admin user in a transaction
+    const result = await this.db.$transaction(async (tx) => {
+      const org = await tx.organization.create({
+        data: {
+          name: data.organizationName,
+          code: data.organizationCode.toUpperCase(),
+          domain: data.domain,
+          timezone: data.timezone || 'Africa/Accra',
+        },
+      });
+
+      const dept = await tx.department.create({
+        data: {
+          name: 'General',
+          code: 'GEN',
+          organizationId: org.id,
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          email: data.adminEmail,
+          passwordHash,
+          firstName: data.adminFirstName,
+          lastName: data.adminLastName,
+          employeeId: 'ADMIN-001',
+          role: 'SUPER_ADMIN',
+          departmentId: dept.id,
+          organizationId: org.id,
+        },
+      });
+
+      // Create a default shift
+      await tx.shift.create({
+        data: {
+          name: 'Standard (8AM - 5PM)',
+          type: 'MORNING',
+          organizationId: org.id,
+          startTime: '08:00',
+          endTime: '17:00',
+          graceMinutesLate: 15,
+          graceMinutesEarly: 15,
+          breakDurationMinutes: 60,
+          isDefault: true,
+        },
+      });
+
+      return { org, user };
+    });
+
+    // Generate tokens so the admin is logged in immediately
+    const tokens = await this.generateTokens(result.user.id, result.user.role);
+
+    this.logger.log(`New organization registered: ${data.organizationName} (${data.organizationCode})`);
+
+    return {
+      user: {
+        id: result.user.id,
+        employeeId: result.user.employeeId,
+        email: result.user.email,
+        firstName: result.user.firstName,
+        lastName: result.user.lastName,
+        role: result.user.role,
+        departmentId: result.user.departmentId,
+        avatarUrl: null,
+      },
+      organization: {
+        id: result.org.id,
+        name: result.org.name,
+        code: result.org.code,
+      },
+      tokens,
+    };
   }
 
   // --- Private Methods ---

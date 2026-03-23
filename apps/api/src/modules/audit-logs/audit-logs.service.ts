@@ -6,6 +6,7 @@ export class AuditLogsService {
   constructor(private readonly db: DatabaseService) {}
 
   async findAll(params: {
+    organizationId: string;
     page?: number;
     perPage?: number;
     action?: string;
@@ -13,10 +14,12 @@ export class AuditLogsService {
     userId?: string;
   }) {
     const page = Number(params.page) || 1;
-    const perPage = Number(params.perPage) || 50;
-    const { action, entityType, userId } = params;
+    const perPage = Math.min(Number(params.perPage) || 50, 100);
+    const { organizationId, action, entityType, userId } = params;
 
-    const where: any = {};
+    const where: any = {
+      user: { organizationId },
+    };
     if (action) where.action = action;
     if (entityType) where.entityType = entityType;
     if (userId) where.userId = userId;

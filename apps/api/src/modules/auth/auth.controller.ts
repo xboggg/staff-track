@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsOptional, Matches } from 'class-validator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -72,10 +72,38 @@ class ConfirmTwoFactorDto {
   code!: string;
 }
 
+class RegisterOrganizationDto {
+  @IsString() organizationName!: string;
+
+  @IsString()
+  @Matches(/^[A-Z0-9_-]{2,20}$/i, { message: 'Organization code must be 2-20 alphanumeric characters' })
+  organizationCode!: string;
+
+  @IsOptional() @IsString() domain?: string;
+
+  @IsEmail() adminEmail!: string;
+
+  @IsString() @MinLength(8) adminPassword!: string;
+
+  @IsString() adminFirstName!: string;
+
+  @IsString() adminLastName!: string;
+
+  @IsOptional() @IsString() timezone?: string;
+}
+
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ short: { ttl: 3600000, limit: 5 } })
+  @ApiOperation({ summary: 'Register a new organization with admin account' })
+  async register(@Body() dto: RegisterOrganizationDto) {
+    return this.authService.registerOrganization(dto);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

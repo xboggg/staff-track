@@ -83,7 +83,7 @@ export class LeavesController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.leavesService.getPendingRequests(req.user.role, Number(page) || 1, Number(limit) || 10);
+    return this.leavesService.getPendingRequests(req.user.organizationId, req.user.role, Number(page) || 1, Number(limit) || 10);
   }
 
   @Post(':id/approve')

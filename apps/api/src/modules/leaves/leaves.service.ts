@@ -84,7 +84,7 @@ export class LeavesService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async getPendingRequests(userRole: string, page: number, limit: number) {
+  async getPendingRequests(organizationId: string, userRole: string, page: number, limit: number) {
     const skip = (page - 1) * limit;
 
     // SUPER_ADMIN/ADMIN can view all pending leaves (oversight only, cannot approve)
@@ -100,9 +100,10 @@ export class LeavesService {
     }
 
     // Admin viewers see ALL pending, approvers see only their level
+    // Always filter by organization to prevent cross-tenant leakage
     const whereClause = isAdminViewer
-      ? { status: 'PENDING' as const }
-      : { status: 'PENDING' as const, currentLevel: { in: canApproveLevels } };
+      ? { status: 'PENDING' as const, user: { organizationId } }
+      : { status: 'PENDING' as const, currentLevel: { in: canApproveLevels }, user: { organizationId } };
 
     const [data, total] = await Promise.all([
       this.db.leaveRequest.findMany({
