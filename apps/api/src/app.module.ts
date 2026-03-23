@@ -14,6 +14,7 @@ import { LeavesModule } from './modules/leaves/leaves.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { HolidaysModule } from './modules/holidays/holidays.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -60,6 +61,7 @@ import { HealthController } from './health.controller';
     ShiftsModule,
     AuditLogsModule,
     HolidaysModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [
