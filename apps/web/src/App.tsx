@@ -14,6 +14,7 @@ import ShiftsPage from './pages/ShiftsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import HolidaysPage from './pages/HolidaysPage';
 import ProfilePage from './pages/ProfilePage';
+import SettingsPage from './pages/SettingsPage';
 import DashboardLayout from './components/DashboardLayout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="shifts" element={<RoleRoute roles={ADMIN_ROLES}><ShiftsPage /></RoleRoute>} />
         <Route path="holidays" element={<RoleRoute roles={ADMIN_ROLES}><HolidaysPage /></RoleRoute>} />
         <Route path="audit-logs" element={<RoleRoute roles={['SUPER_ADMIN', 'ADMIN']}><AuditLogsPage /></RoleRoute>} />
+        <Route path="settings" element={<RoleRoute roles={['SUPER_ADMIN']}><SettingsPage /></RoleRoute>} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
