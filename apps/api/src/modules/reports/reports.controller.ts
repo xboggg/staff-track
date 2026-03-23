@@ -5,7 +5,6 @@ import {
   UseGuards,
   Req,
   Res,
-  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
